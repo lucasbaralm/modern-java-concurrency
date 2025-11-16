@@ -1,184 +1,97 @@
-# modern-java
+# modern-java-concurrency
 
-This repo has the code for modern java.
+A focused overview of concurrency and threads as used in this repository.
 
-## Table of Contents
+This project demonstrates different concurrency approaches in modern Java with emphasis on platform threads and virtual threads (Project Loom). The document below explains key concepts used in the code, how the sample services exercise threading, a short note about benchmarking results included in the project, and credits to the original author.
 
-- Java Installation
-  - [Java Installation using Installer](#java-installation-using-installer)
-  - [Java Installation using sdkman](#install-java-using-sdk-man)
-- [Spring Boot using Virtual Threads](#spring-boot-using-virtual-threads)
-  - [Remote Service](#remote-service)
-- Install "ab - Apache HTTP server benchmarking tool"
-  - [Mac Installation](#install-ab-on-mac)
-  - [Windows Installation](#install-ab-on-windows)
-- [Benchmarking with "ab - Apache HTTP server benchmarking tool"](#benchmarking-with-ab---apache-http-server-benchmarking-tool)
-  - [Benchmark with 10 requests with the 10 concurrent users ](#benchmark-with-10-requests-with-the-10-concurrent-users-)
-  - [Benchmark with 20 requests with the 10 concurrent users](#benchmark-with-20-requests-with-the-10-concurrent-users)
-  - [Benchmark with 60 requests with the 20 concurrent users](#benchmark-with-60-requests-with-the-20-concurrent-users)
+## Overview
 
-## Java Installation using Installer
+The code in this repository shows examples of:
+- Creating and running platform threads and virtual threads.
+- Blocking vs non-blocking patterns and how virtual threads help with blocking IO.
+- Using `Thread.join()` to coordinate and wait for thread completion.
+- Simple benchmarking (using `ab`) to compare behavior and latency under concurrent load.
 
-- Download the latest java from the below link
-  - [Java 21](https://www.oracle.com/java/technologies/downloads/)
+## Threads and join()
 
-## Install the Latest Version of JAVA using SDK man
+A thread represents a unit of execution. Java historically used platform (OS) threads. Project Loom introduces virtual threads which are lightweight user-mode threads that allow far higher concurrency for blocking workloads.
 
-### Install sdkMan
+`Thread.join()` is a synchronization method that causes the calling thread to wait until the target thread has finished. In practice:
+- Calling `t.join()` blocks the caller until `t` terminates (or the caller is interrupted).
+- `join()` throws `InterruptedException` so callers should handle interruption and typically restore the interrupt status with `Thread.currentThread().interrupt()`.
 
-- Follow the instructions in the below link to install sdkman in your mac.
-  - [sdkMan](https://sdkman.io/install)
+Example (conceptual):
 
-### Install Java using sdk man
+```java
+Thread t1 = new Thread(() -> doWork());
+Thread t2 = new Thread(() -> doOtherWork());
 
-- Run the below command to view the different version of supported Java
-```agsl
-sdk list java
-```
-#### How to install a specific Java Version ?
+t1.start();
+t2.start();
 
-##### Java 21
+try {
+    t1.join(); // wait for t1
+    t2.join(); // wait for t2
+} catch (InterruptedException e) {
+    Thread.currentThread().interrupt();
+}
 
-```linux
-sdk list java | grep '21'
-```
-- Running the below command will install Java 20.
-
-```linux
-sdk install 21.0.1-tem
+// both threads finished here
 ```
 
+Why use `join()`:
+- To ensure results produced by other threads are ready before continuing.
+- To provide deterministic ordering in shutdown or finalization sequences.
 
+Edge cases:
+- If a thread is a daemon, the JVM may exit before non-daemon callers join it.
+- Long or deadlocked threads will indefinitely block a join; consider timeouts or interruption.
 
-## Spring Boot using Virtual Threads
+## Virtual threads (Project Loom)
 
-### application.yml
+Virtual threads are extremely lightweight and well-suited for workloads that perform blocking I/O. They enable you to create many concurrent handlers without exhausting OS thread resources.
 
-- Add the below config in the application.yml
+In Spring Boot this project includes a toggle to enable virtual threads in `application.yml`:
 
-```yml
+```yaml
 spring:
   threads:
     virtual:
       enabled: true
 ```
 
-### Validate virual threads are enabled
+Benefits shown in the examples:
+- When handling many concurrent blocking requests, virtual threads allow throughput and latency improvements compared to a small pool of platform threads.
+- Simpler programming model — keep blocking code but scale with many virtual threads.
 
-- Run the below command to check the thread executing the request
+## Services and example endpoints in this repo
 
-```curl
-curl -i http://localhost:8080/currentThread  
-```
+This project contains a small remote service and a client to exercise blocking behavior. Example endpoints used by the benchmark and demos:
 
-### Remote Service
+- GET /currentThread — returns information about the thread processing the request (useful to observe whether the request ran on a virtual thread).
+- GET /remote/{id} — a small remote service endpoint used by the client examples.
+- GET /blocking/{seconds} — client endpoint which performs a blocking call to the remote service for the specified number of seconds. This endpoint is used for benchmarking comparisons.
 
-```curl
-curl -i http://localhost:8085/remote/2  
-```
+Example quick checks (curl):
 
-### Client Call to remote Service
+curl -i http://localhost:8080/currentThread
+curl -i http://localhost:8085/remote/2
+curl -i http://localhost:8080/blocking/1
 
-```curl
-curl -i  http://localhost:8080/blocking/1
-```
+## Benchmarking summary (high level)
 
-## Benchmarking with "ab - Apache HTTP server benchmarking tool"
+Benchmarks in the original repository used `ab` (ApacheBench) to compare virtual threads vs platform threads using a constrained tomcat thread pool (for clearer comparison). Key takeaways from the included results:
+- Virtual threads handled blocking IO more efficiently, reducing average request latency and total time for batches of concurrent requests.
+- With many concurrent blocking requests, platform-thread-based configurations with small thread pools showed much higher per-request latency and longer total completion time.
 
-## Install "ab - Apache HTTP server benchmarking tool"
+Typical `ab` commands used in the repo's examples:
 
-### Install ab on mac
+ab -n 20 -c 10 http://localhost:8080/blocking/2
+ab -n 60 -c 20 http://localhost:8080/blocking/2
 
-### Install ab on windows
-- Follow the instructions in the below link to understand more.
-- https://www.inmotionhosting.com/support/edu/wordpress/performance/stress-test-with-apachebench/#test
+See the code and the included sample outputs in the original README for exact numbers; the project includes measured example outputs comparing virtual vs platform threads.
 
-### Set Up
+## Notes and credits
 
-#### application.yml
-
-- We are just going to have 10 tomcat threads to handle our requests
-  - This is to simplify our testing and comparison will be straightforward with this config
-```
-server:
-  tomcat:
-    threads:
-      max: 10
-```
-
-### Benchmark with 10 requests with the 10 concurrent users
-
-- This command will run ten requests with the concurrency of 10.
-  - This means all the 10 requests will be run in parallel.
-  - Since we are passing **2**, then it should take approximately 2 seconds to complete.
-
-```bash
-ab -n 10 -c 10  http://localhost:8080/blocking/2
-```
-
-### Benchmark with 20 requests with the 10 concurrent users
-
-- This command will run ten requests with the concurrency of 10.
-  - This means all the 10 requests will be run in parallel.
-  - Since we are passing **2**, then it should take approximately 4 seconds to complete.
-
-```bash
-ab -n 20 -c 10  http://localhost:8080/blocking/2
-```
-
-#### With Virtual Threads
-
-- It took **6.055** seconds to complete
-  - Ideally it should have completed in ~4 seconds, but the benchmarking tool adds a little bit of delay to the overall time to complete.
-
-#### Without Virtual Threads
-
-- It took **6.199** seconds to complete
-
-### Benchmark with 60 requests with the 20 concurrent users
-
-```bash
-ab -n 60 -c 20  http://localhost:8080/blocking/2
-```
-- Each batch we will send 20 requests and wait for it to complete.
-  - So in this case, there will be 3 batches of 20 concurrent requests will be sent.
-
-#### With Virtual Threads
-
-- It took **8.078** seconds to complete
-  - Ideally it should have completed in ~6 seconds, but the benchmarking tool adds a little bit of delay to the overall time to complete.
-  - The Average time for each request is ~2 seconds
-  ```text
-  Percentage of the requests served within a certain time (ms)
-  50%   2022
-  66%   2023
-  75%   2023
-  80%   2024
-  90%   2025
-  95%   2026
-  98%   2026
-  99%   2026
-  100%   2026 (longest request)
-  ```
-
-#### Without Virtual Threads
-
-- It took **14.179** seconds to complete
-  - The Average time for each request is ~4 seconds
-  ```text
-  Percentage of the requests served within a certain time (ms)
-    50%   4037
-    66%   4037
-    75%   4038
-    80%   4039
-    90%   4040
-    95%   4040
-    98%   4041
-    99%   4041
-   100%   4041 (longest request)
-  
-  ```
-
-#### Summary
-
-- The results above prove virtual-threads are far better in handling blocking IO calls better than the platform threads.
+- This repository accompanies course materials used to explore concurrency and threads.
+- Credit: original repository and author — dilipsundarraj1 (https://github.com/dilipsundarraj1). The repository preserves the original commit history which attributes the original work.
