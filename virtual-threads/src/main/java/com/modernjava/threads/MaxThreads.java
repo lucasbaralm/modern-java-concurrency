@@ -22,7 +22,15 @@ public class MaxThreads {
 
     public static void main(String[] args) {
 
+        int MAX_THREADS = 1000;
+        IntStream.rangeClosed(1, MAX_THREADS).forEach(i -> {
+            Thread.ofPlatform().start(() -> doSomeWork(i));
+        });
         log("Program Completed!");
-
+        //Platform threads are tied to OS threads. Each platform thread takes to 1MB to 2MB of memory.
+        //So, creating too many platform threads can lead to OutOfMemoryError if heap memory is exceeded.
+        //Other drawback include the blocking nature of java platform threads. When you await for responses of threads
+        //Tomcat thread poll exausted for example, caused by too many platform threads or service unavailability or lag
+        //Solution: Virtual threads way more lightweight and efficient. we create a vt per request
     }
 }

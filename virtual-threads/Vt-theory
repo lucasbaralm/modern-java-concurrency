@@ -1,0 +1,35 @@
+Vt are also called lightweight threads, very cheap to create and destroy
+->Shallow call stacks -> each vt starts with a minimal logical stack frame and grows as needed
+->Not 1:1 to Kernel(OS) Threads like platform threads, they are mapped to thread pools, that is mapped to a plat/carrier threads
+->ForkJoinPool is the default carrier thread pool for vt
+->Vt are scheduled by the JVM, not the OS
+->Better scalabity:
+    Platform thread: ~1 MiB by thread (-Xss configurável).
+    Virtual thread: ~1–10 KiB initial (heap-backed), usually below: 2 KiB.
+    VT: multiple threads to a single OS thread, they are multiplexed over the carrier by jvm
+    ->A blocked vt means that another vt is scheduled an executed on the same carrier thread
+
+When to choose
+Use virtual threads for high concurrency and blocking I/O.
+Use platform threads for CPU-bound work, native affinity, or where pinning/native JNI(java native interface(C/C++ execution) is required
+
+Number of carrier threads = number of cores of the machine by default, can be configured
+
+ForkJoinPool -> FIFO task queue, the Scheduler maps virtual threads to carrier threads from the pool(Mounting and Unmounting)
+A blocked thread gets unmounted from the carrier thread, allowing other vt to be executed
+For example in a HTTP Call, when waiting the return of the call it auto locks, just like in any blocking operation.
+The worker thread can pick another vt to execute while the first one is blocked, which means that can not be the same of the start of the vt execution
+
+VT are implemented using Continuation API - pause, and resume API pretty much
+yield() -> hint to the scheduler that the current vt is willing to yield its current use of the carrier thread
+->The thread then stores the status of the function, inclduing the call stack, local variables, etc
+run() -> resumes the execution of a vt from the point it was paused
+
+Pinned Threads -> VT that are bound to a specific carrier thread, cannot be unmounted even if blocked, only happens when
+Using syncronezed(lock){} blocks or other low-level concurrency constructs that require thread affinity
+
+ReentrantLock -> a way to be sure that only one thread is executing a critical section of code at a time
+When a vt tries to acquire a ReentrantLock and is blocked, it gets unmounted from the carrier thread, allowing other vt to be executed
+When the lock is released, the vt is scheduled to be resumed on a carrier thread from the pool
+
+a more efficient way to handle blocking operations in virtual threads compared to synchronized blocks
