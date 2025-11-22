@@ -1,0 +1,20 @@
+Future API
+
+To solve the problem that was no way to define which VT would return first,
+so would be hard to define timeouts, or cancel tasks, results, the Future API was created to handle VT results.
+Old way:
+    >ExecutorService define a fixed number of threads in the threadPool
+
+    Future-> pretty much gives you a ticket with reference to a call, to get the result later, by using executorService.submit(Callable<T> task)
+    then we call future.get() to get the result, blocking if necessary until it is available.
+    >Designed to block the thread until the result is available.
+    >No better way to combine futures but to .get in each and create an object or send to a function.
+
+New way with VT:
+    >Completable Future -> Released in Java 8, just as stream API, it looks very similar to Stream API.
+    >A callback based API, that allows to define a chain of actions to be performed when the result is available.
+    >Non-blocking, allows to define actions to be performed when the result is available, without blocking the thread.
+    >Better way to combine futures, using thenApply, thenCompose, thenAccept, etc.
+
+>Blocking IO tasks still going to block the VT, but the carrier thread will be free to execute other VT while waiting for the IO operation to complete.
+>Exception and error handling is more flexible with CompletableFuture, allowing to define actions to be performed in case of exceptions using exceptionally, handle, etc.

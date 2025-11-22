@@ -33,3 +33,7 @@ When a vt tries to acquire a ReentrantLock and is blocked, it gets unmounted fro
 When the lock is released, the vt is scheduled to be resumed on a carrier thread from the pool
 
 a more efficient way to handle blocking operations in virtual threads compared to synchronized blocks
+
+Concurrency -> Multiplex, switching between tasks
+Parallelism -> Simultaneous execution (.parallelStream for example)
+
